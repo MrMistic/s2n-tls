@@ -18,6 +18,8 @@
     #error "Expected s2n_prelude.h to be included as part of the compiler flags"
 #endif
 
+#include <stdlib.h>
+#include <string.h>
 #include <strings.h>
 #include <time.h>
 
@@ -119,6 +121,22 @@ static int s2n_config_init(struct s2n_config *config)
     POSIX_GUARD_RESULT(s2n_map_complete(config->domain_name_to_cert_map));
 
     s2n_x509_trust_store_init_empty(&config->trust_store);
+
+    /* HARNESS-ONLY (do not upstream): allow benchmark runs to select the cert
+     * verification backend via environment variable, since the setter is
+     * internal and not reachable from the Rust bindings. Values match the
+     * s2n_cert_verify_backend enum: "zero_copy" or "differential". Unset or
+     * unrecognized values keep the libcrypto default. */
+    const char *backend_env = getenv("S2N_BENCH_CERT_BACKEND");
+    if (backend_env != NULL) {
+        if (strcmp(backend_env, "zero_copy") == 0) {
+            POSIX_GUARD_RESULT(s2n_config_set_cert_verify_backend(config, S2N_CERT_BACKEND_ZERO_COPY));
+        } else if (strcmp(backend_env, "differential") == 0) {
+            POSIX_GUARD_RESULT(s2n_config_set_cert_verify_backend(config, S2N_CERT_BACKEND_DIFFERENTIAL));
+        } else if (strcmp(backend_env, "libcrypto") == 0) {
+            POSIX_GUARD_RESULT(s2n_config_set_cert_verify_backend(config, S2N_CERT_BACKEND_LIBCRYPTO));
+        }
+    }
 
     return 0;
 }
