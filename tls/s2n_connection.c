@@ -385,6 +385,20 @@ int s2n_connection_set_config(struct s2n_connection *conn, struct s2n_config *co
     }
 
     conn->config = config;
+
+    /* For TLS 1.3-only policies, narrow the required transcript hashes early.
+     * By default, all 7 hash algorithms are marked required until the cipher
+     * suite is negotiated (hedging for TLS 1.0-1.2 compatibility). TLS 1.3
+     * only uses SHA-256 or SHA-384 for the transcript (RFC 8446 §7.1), so
+     * connections that cannot fall back to TLS 1.2 can skip MD5/SHA-1/SHA-224/
+     * SHA-512 hedging on the ClientHello, skipping unneeded work each handshake. */
+    const struct s2n_security_policy *policy = conn->security_policy_override ? conn->security_policy_override : config->security_policy;
+    if (policy && policy->minimum_protocol_version >= S2N_TLS13) {
+        memset(conn->handshake.required_hash_algs, 0, sizeof(conn->handshake.required_hash_algs));
+        conn->handshake.required_hash_algs[S2N_HASH_SHA256] = 1;
+        conn->handshake.required_hash_algs[S2N_HASH_SHA384] = 1;
+    }
+
     return S2N_SUCCESS;
 }
 
